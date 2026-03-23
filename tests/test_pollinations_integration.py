@@ -198,7 +198,7 @@ class PollinationsErrorParsingTest(unittest.IsolatedAsyncioTestCase):
         with patch(
             "app.services.pollinations.get_client",
             AsyncMock(return_value=_FakeHttpClient(response)),
-        ):
+        ), patch.object(settings, "relay_base_url", ""):
             with self.assertRaises(PollinationsError) as ctx:
                 await generate_image("https://gen.pollinations.ai/image/test")
 
@@ -240,7 +240,8 @@ class ChatCompletionCompatTest(unittest.TestCase):
         self.assertEqual(body["object"], "chat.completion")
         self.assertEqual(body["model"], "z-image-1216x832")
         self.assertIn("![image](", body["choices"][0]["message"]["content"])
-        self.assertIn("http://testserver/images/", body["choices"][0]["message"]["content"])
+        expected_base = settings.relay_base_url or "http://testserver"
+        self.assertIn(f"{expected_base}/images/", body["choices"][0]["message"]["content"])
 
     def test_chat_completions_supports_text_content_parts(self) -> None:
         response = httpx.Response(
