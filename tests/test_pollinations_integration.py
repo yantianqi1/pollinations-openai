@@ -4,12 +4,15 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import httpx
 from fastapi import HTTPException
+from fastapi.testclient import TestClient
 
 from app.config import settings
+from app.main import app
 from app.routers.images import create_image
 from app.routers.models import list_models
 from app.schemas.images import ImageGenerationRequest
 from app.services.pollinations import PollinationsError, generate_image
+from app.services.relay_image import create_relay_image
 from app.services.url_builder import build_pollinations_image_url
 
 PUBLIC_MODEL_ALIASES = [
@@ -56,26 +59,25 @@ class DownstreamModelAliasTest(unittest.IsolatedAsyncioTestCase):
             PUBLIC_MODEL_ALIASES,
         )
 
-    async def test_create_image_maps_alias_to_zimage_and_fixed_size(self) -> None:
+    async def test_create_relay_image_maps_alias_to_zimage_and_fixed_size(self) -> None:
         original_relay_base_url = settings.relay_base_url
         settings.relay_base_url = "https://relay.example"
 
-        body = ImageGenerationRequest(
-            model="z-image-1216x832",
-            prompt="a cute cat",
-            size="512x512",
-            seed=42,
-        )
-
         try:
             with patch(
-                "app.routers.images.generate_image",
+                "app.services.relay_image.generate_image",
                 AsyncMock(return_value=(b"img", "image/png")),
             ) as mock_generate, patch(
-                "app.routers.images.image_cache.store",
+                "app.services.relay_image.image_cache.store",
                 Mock(return_value="img123"),
             ):
-                response = await create_image(Mock(), body)
+                response = await create_relay_image(
+                    prompt="a cute cat",
+                    model="z-image-1216x832",
+                    size="512x512",
+                    seed=42,
+                    request_base_url="http://testserver/",
+                )
         finally:
             settings.relay_base_url = original_relay_base_url
 
@@ -86,7 +88,7 @@ class DownstreamModelAliasTest(unittest.IsolatedAsyncioTestCase):
                 "&nologo=true&private=true&safe=false"
             )
         )
-        self.assertEqual(response.data[0].url, "https://relay.example/images/img123")
+        self.assertEqual(response.url, "https://relay.example/images/img123")
 
     async def test_create_image_surfaces_upstream_validation_error(self) -> None:
         body = ImageGenerationRequest(
@@ -97,7 +99,7 @@ class DownstreamModelAliasTest(unittest.IsolatedAsyncioTestCase):
         )
 
         with patch(
-            "app.routers.images.generate_image",
+            "app.routers.images.create_relay_image",
             AsyncMock(
                 side_effect=PollinationsError(
                     message="HTTP 422: upstream rejected request",
@@ -193,4 +195,80 @@ class PollinationsErrorParsingTest(unittest.IsolatedAsyncioTestCase):
                 "exceeds limit of 2,359,296 pixels. Max: 1536x1536 or equivalent "
                 "area."
             ),
+        )
+
+
+class ChatCompletionCompatTest(unittest.TestCase):
+    def test_chat_completions_returns_markdown_image(self) -> None:
+        response = httpx.Response(
+            status_code=200,
+            content=b"image-bytes",
+            headers={"content-type": "image/png"},
+            request=httpx.Request("GET", "https://gen.pollinations.ai/image/test"),
+        )
+
+        with patch(
+            "app.services.pollinations.get_client",
+            AsyncMock(return_value=_FakeHttpClient(response)),
+        ):
+            client = TestClient(app)
+            result = client.post(
+                "/v1/chat/completions",
+                json={
+                    "model": "z-image-1216x832",
+                    "messages": [{"role": "user", "content": "a cute cat"}],
+                },
+            )
+
+        self.assertEqual(result.status_code, 200)
+        body = result.json()
+        self.assertEqual(body["object"], "chat.completion")
+        self.assertEqual(body["model"], "z-image-1216x832")
+        self.assertIn("![image](", body["choices"][0]["message"]["content"])
+        self.assertIn("http://testserver/images/", body["choices"][0]["message"]["content"])
+
+    def test_chat_completions_supports_text_content_parts(self) -> None:
+        response = httpx.Response(
+            status_code=200,
+            content=b"image-bytes",
+            headers={"content-type": "image/png"},
+            request=httpx.Request("GET", "https://gen.pollinations.ai/image/test"),
+        )
+
+        with patch(
+            "app.services.pollinations.get_client",
+            AsyncMock(return_value=_FakeHttpClient(response)),
+        ):
+            client = TestClient(app)
+            result = client.post(
+                "/v1/chat/completions",
+                json={
+                    "model": "z-image-1024x1024",
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": [{"type": "text", "text": "portrait photo"}],
+                        }
+                    ],
+                },
+            )
+
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(result.json()["choices"][0]["message"]["role"], "assistant")
+
+    def test_chat_completions_rejects_streaming(self) -> None:
+        client = TestClient(app)
+        result = client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "z-image-1216x832",
+                "messages": [{"role": "user", "content": "a cute cat"}],
+                "stream": True,
+            },
+        )
+
+        self.assertEqual(result.status_code, 400)
+        self.assertEqual(
+            result.json()["detail"],
+            "Streaming is not supported for image chat completions",
         )

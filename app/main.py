@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.routers import admin, images, models
+from app.routers import admin, chat, images, models
 from app.services.image_cache import image_cache
 from app.services.pollinations import close_client
 
@@ -42,6 +42,7 @@ app.add_middleware(
 )
 
 app.include_router(images.router)
+app.include_router(chat.router)
 app.include_router(models.router)
 app.include_router(admin.router)
 
