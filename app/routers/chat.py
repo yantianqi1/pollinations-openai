@@ -1,7 +1,11 @@
+import json
 import logging
 import time
+import uuid
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import StreamingResponse
 
 from app.schemas.chat import (
     ChatCompletionChoice,
@@ -15,8 +19,10 @@ from app.services.relay_image import client_error_status, create_relay_image
 
 logger = logging.getLogger(__name__)
 
-STREAM_NOT_SUPPORTED_MESSAGE = "Streaming is not supported for image chat completions"
+STREAM_CONTENT_TYPE = "text/event-stream"
+STREAM_DONE = "data: [DONE]\n\n"
 NO_USER_MESSAGE_ERROR = "A user text message is required for image generation"
+CHAT_COMPLETION_CHUNK_OBJECT = "chat.completion.chunk"
 
 router = APIRouter()
 
@@ -46,11 +52,58 @@ def _image_markdown(image_url: str) -> str:
     return f"![image]({image_url})"
 
 
+def _chunk_payload(
+    completion_id: str,
+    created: int,
+    model: str,
+    delta: dict[str, str],
+    finish_reason: Optional[str],
+) -> str:
+    payload = {
+        "id": completion_id,
+        "object": CHAT_COMPLETION_CHUNK_OBJECT,
+        "created": created,
+        "model": model,
+        "choices": [
+            {
+                "index": 0,
+                "delta": delta,
+                "finish_reason": finish_reason,
+            }
+        ],
+    }
+    return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+
+def _streaming_body(model: str, content: str):
+    completion_id = f"chatcmpl-{uuid.uuid4().hex}"
+    created = int(time.time())
+    yield _chunk_payload(
+        completion_id=completion_id,
+        created=created,
+        model=model,
+        delta={"role": "assistant"},
+        finish_reason=None,
+    )
+    yield _chunk_payload(
+        completion_id=completion_id,
+        created=created,
+        model=model,
+        delta={"content": content},
+        finish_reason=None,
+    )
+    yield _chunk_payload(
+        completion_id=completion_id,
+        created=created,
+        model=model,
+        delta={},
+        finish_reason="stop",
+    )
+    yield STREAM_DONE
+
+
 @router.post("/v1/chat/completions", response_model=ChatCompletionResponse)
 async def create_chat_completion(request: Request, body: ChatCompletionRequest):
-    if body.stream:
-        raise HTTPException(status_code=400, detail=STREAM_NOT_SUPPORTED_MESSAGE)
-
     prompt = _extract_prompt(body.messages)
     try:
         result = await create_relay_image(
@@ -73,13 +126,20 @@ async def create_chat_completion(request: Request, body: ChatCompletionRequest):
             detail="Failed to generate image from Pollinations",
         )
 
+    content = _image_markdown(result.url)
+    if body.stream:
+        return StreamingResponse(
+            _streaming_body(body.model, content),
+            media_type=STREAM_CONTENT_TYPE,
+        )
+
     return ChatCompletionResponse(
         created=int(time.time()),
         model=body.model,
         choices=[
             ChatCompletionChoice(
                 message=ChatCompletionResponseMessage(
-                    content=_image_markdown(result.url),
+                    content=content,
                 )
             )
         ],

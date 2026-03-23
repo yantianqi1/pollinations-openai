@@ -256,19 +256,29 @@ class ChatCompletionCompatTest(unittest.TestCase):
         self.assertEqual(result.status_code, 200)
         self.assertEqual(result.json()["choices"][0]["message"]["role"], "assistant")
 
-    def test_chat_completions_rejects_streaming(self) -> None:
-        client = TestClient(app)
-        result = client.post(
-            "/v1/chat/completions",
-            json={
-                "model": "z-image-1216x832",
-                "messages": [{"role": "user", "content": "a cute cat"}],
-                "stream": True,
-            },
+    def test_chat_completions_streams_sse_chunks(self) -> None:
+        response = httpx.Response(
+            status_code=200,
+            content=b"image-bytes",
+            headers={"content-type": "image/png"},
+            request=httpx.Request("GET", "https://gen.pollinations.ai/image/test"),
         )
 
-        self.assertEqual(result.status_code, 400)
-        self.assertEqual(
-            result.json()["detail"],
-            "Streaming is not supported for image chat completions",
-        )
+        with patch(
+            "app.services.pollinations.get_client",
+            AsyncMock(return_value=_FakeHttpClient(response)),
+        ):
+            client = TestClient(app)
+            result = client.post(
+                "/v1/chat/completions",
+                json={
+                    "model": "z-image-1216x832",
+                    "messages": [{"role": "user", "content": "a cute cat"}],
+                    "stream": True,
+                },
+            )
+
+        self.assertEqual(result.status_code, 200)
+        self.assertIn("text/event-stream", result.headers["content-type"])
+        self.assertIn("chat.completion.chunk", result.text)
+        self.assertIn("data: [DONE]", result.text)
