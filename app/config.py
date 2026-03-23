@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     image_cache_ttl: int = 1800
     image_cache_max_size: int = 200
+    image_storage_dir: str = "data/images"
     model_cache_ttl: int = 3600
     default_nologo: bool = True
     default_private: bool = True
