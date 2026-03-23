@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>花粉中转站 - 管理面板</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#0f0f11;--card:#1a1a2e;--card-hover:#22223a;--border:#2a2a3e;
+  --text:#e0e0e0;--text2:#8888aa;--accent:#6c5ce7;--accent2:#a29bfe;
+  --green:#00e676;--red:#ff5252;--yellow:#ffd740;
+}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+.header{padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px}
+.header h1{font-size:20px;font-weight:600}
+.header span{color:var(--text2);font-size:13px}
+.tabs{display:flex;gap:4px;padding:12px 24px;border-bottom:1px solid var(--border);background:#13131a}
+.tab{padding:8px 18px;border-radius:8px;cursor:pointer;font-size:14px;color:var(--text2);transition:.2s;border:none;background:none}
+.tab:hover{color:var(--text);background:var(--card)}
+.tab.active{color:#fff;background:var(--accent)}
+.content{padding:24px;max-width:960px;margin:0 auto}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;margin-bottom:24px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px}
+.card .label{font-size:12px;color:var(--text2);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}
+.card .value{font-size:28px;font-weight:700}
+.card .value.green{color:var(--green)}.card .value.red{color:var(--red)}.card .value.yellow{color:var(--yellow)}
+.status-dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:8px;vertical-align:middle}
+.status-dot.online{background:var(--green);box-shadow:0 0 8px var(--green)}
+.status-dot.offline{background:var(--red);box-shadow:0 0 8px var(--red)}
+.section{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:20px}
+.section h3{font-size:15px;margin-bottom:16px;color:var(--accent2)}
+.form-row{display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+.form-row label{width:140px;font-size:13px;color:var(--text2);flex-shrink:0}
+input[type="text"],input[type="number"],textarea,select{
+  background:#13131a;border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);
+  font-size:14px;outline:none;transition:border .2s;width:100%;max-width:320px}
+input:focus,textarea:focus,select:focus{border-color:var(--accent)}
+textarea{resize:vertical;min-height:80px;max-width:100%}
+select{cursor:pointer}
+.toggle{position:relative;width:44px;height:24px;flex-shrink:0}
+.toggle input{display:none}
+.toggle .slider{position:absolute;inset:0;background:#333;border-radius:12px;cursor:pointer;transition:.3s}
+.toggle input:checked+.slider{background:var(--accent)}
+.toggle .slider::before{content:'';position:absolute;width:18px;height:18px;border-radius:50%;background:#fff;top:3px;left:3px;transition:.3s}
+.toggle input:checked+.slider::before{transform:translateX(20px)}
+.btn{padding:8px 20px;border-radius:8px;border:none;font-size:14px;cursor:pointer;transition:.2s;font-weight:500}
+.btn-primary{background:var(--accent);color:#fff}.btn-primary:hover{background:#5b4bd5}
+.btn-secondary{background:var(--card-hover);color:var(--text);border:1px solid var(--border)}.btn-secondary:hover{background:#2e2e4a}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.size-presets{display:flex;gap:8px;flex-wrap:wrap}
+.size-presets .chip{padding:6px 14px;border-radius:6px;font-size:12px;cursor:pointer;border:1px solid var(--border);background:var(--bg);color:var(--text2);transition:.2s}
+.size-presets .chip.active{border-color:var(--accent);color:var(--accent);background:#1e1e3a}
+.size-presets .chip:hover{border-color:var(--accent)}
+.result-img{max-width:100%;border-radius:12px;margin-top:16px;border:1px solid var(--border)}
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--border);font-size:14px}
+th{color:var(--text2);font-size:12px;text-transform:uppercase;letter-spacing:.5px}
+tr:hover{background:var(--card-hover)}
+.toast{position:fixed;bottom:24px;right:24px;padding:12px 20px;border-radius:8px;font-size:14px;z-index:999;opacity:0;transform:translateY(10px);transition:.3s}
+.toast.show{opacity:1;transform:translateY(0)}
+.toast.success{background:#1b5e20;color:#a5d6a7;border:1px solid #2e7d32}
+.toast.error{background:#b71c1c;color:#ef9a9a;border:1px solid #c62828}
+.spinner{display:inline-block;width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:8px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.hidden{display:none}
+@media(max-width:600px){.cards{grid-template-columns:1fr}.form-row{flex-direction:column;align-items:flex-start}.form-row label{width:auto}}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>花粉中转站</h1>
+  <span>管理面板</span>
+</div>
+
+<div class="tabs">
+  <button class="tab active" data-tab="status">状态总览</button>
+  <button class="tab" data-tab="config">配置管理</button>
+  <button class="tab" data-tab="test">图片测试</button>
+  <button class="tab" data-tab="models">模型列表</button>
+</div>
+
+<!-- Tab 1: Status -->
+<div class="content tab-content" id="tab-status">
+  <div class="cards">
+    <div class="card">
+      <div class="label">服务状态</div>
+      <div class="value" id="st-status"><span class="status-dot" id="st-dot"></span><span id="st-text">--</span></div>
+    </div>
+    <div class="card">
+      <div class="label">缓存数量</div>
+      <div class="value" id="st-cache">--</div>
+    </div>
+    <div class="card">
+      <div class="label">内存占用</div>
+      <div class="value" id="st-memory">--</div>
+    </div>
+    <div class="card">
+      <div class="label">总请求</div>
+      <div class="value" id="st-total">--</div>
+    </div>
+    <div class="card">
+      <div class="label">成功</div>
+      <div class="value green" id="st-success">0</div>
+    </div>
+    <div class="card">
+      <div class="label">失败</div>
+      <div class="value red" id="st-fail">0</div>
+    </div>
+  </div>
+  <div class="section">
+    <h3>API Key</h3>
+    <div id="st-apikey" style="font-family:monospace;font-size:16px;letter-spacing:1px">--</div>
+  </div>
+  <button class="btn btn-secondary" onclick="loadStats()">刷新</button>
+</div>
+
+<!-- Tab 2: Config -->
+<div class="content tab-content hidden" id="tab-config">
+  <div class="section">
+    <h3>配置项</h3>
+    <div class="form-row">
+      <label>API Key</label>
+      <input type="text" id="cfg-apikey" placeholder="输入新的 API Key">
+    </div>
+    <div class="form-row">
+      <label>当前 Key</label>
+      <span id="cfg-apikey-current" style="font-family:monospace;color:var(--text2)">--</span>
+    </div>
+    <div class="form-row">
+      <label>缓存 TTL (秒)</label>
+      <input type="number" id="cfg-ttl" min="60">
+    </div>
+    <div class="form-row">
+      <label>最大缓存数</label>
+      <input type="number" id="cfg-maxsize" min="1">
+    </div>
+    <div class="form-row">
+      <label>nologo</label>
+      <label class="toggle"><input type="checkbox" id="cfg-nologo"><span class="slider"></span></label>
+    </div>
+    <div class="form-row">
+      <label>private</label>
+      <label class="toggle"><input type="checkbox" id="cfg-private"><span class="slider"></span></label>
+    </div>
+    <div style="margin-top:20px">
+      <button class="btn btn-primary" onclick="saveConfig()">保存配置</button>
+    </div>
+  </div>
+</div>
+
+<!-- Tab 3: Image Test -->
+<div class="content tab-content hidden" id="tab-test">
+  <div class="section">
+    <h3>图片生成测试</h3>
+    <div class="form-row">
+      <label>模型</label>
+      <select id="test-model"></select>
+    </div>
+    <div class="form-row">
+      <label>Prompt</label>
+      <textarea id="test-prompt" placeholder="A beautiful sunset over mountains"></textarea>
+    </div>
+    <div class="form-row">
+      <label>尺寸</label>
+      <div class="size-presets">
+        <span class="chip active" data-size="1024x1024">1024x1024</span>
+        <span class="chip" data-size="1024x768">1024x768</span>
+        <span class="chip" data-size="768x1024">768x1024</span>
+        <span class="chip" data-size="1280x720">1280x720</span>
+        <span class="chip" data-size="512x512">512x512</span>
+      </div>
+    </div>
+    <div style="margin-top:20px">
+      <button class="btn btn-primary" id="test-btn" onclick="generateImage()">生成图片</button>
+    </div>
+    <div id="test-result" class="hidden" style="margin-top:20px">
+      <img id="test-img" class="result-img" alt="Generated image">
+    </div>
+  </div>
+</div>
+
+<!-- Tab 4: Models -->
+<div class="content tab-content hidden" id="tab-models">
+  <div class="section">
+    <h3>可用模型</h3>
+    <table>
+      <thead><tr><th>#</th><th>模型 ID</th><th>所有者</th></tr></thead>
+      <tbody id="models-tbody"></tbody>
+    </table>
+  </div>
+  <button class="btn btn-secondary" onclick="loadModels()">刷新</button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const $$ = s => document.querySelectorAll(s);
+
+// Tabs
+$$('.tab').forEach(t => t.addEventListener('click', () => {
+  $$('.tab').forEach(x => x.classList.remove('active'));
+  $$('.tab-content').forEach(x => x.classList.add('hidden'));
+  t.classList.add('active');
+  const id = 'tab-' + t.dataset.tab;
+  $('#' + id).classList.remove('hidden');
+  if (t.dataset.tab === 'status') loadStats();
+  if (t.dataset.tab === 'config') loadConfig();
+  if (t.dataset.tab === 'models') loadModels();
+  if (t.dataset.tab === 'test') loadTestModels();
+}));
+
+// Size presets
+$$('.size-presets .chip').forEach(c => c.addEventListener('click', () => {
+  $$('.size-presets .chip').forEach(x => x.classList.remove('active'));
+  c.classList.add('active');
+}));
+
+function getSelectedSize() {
+  const active = $('.size-presets .chip.active');
+  return active ? active.dataset.size : '1024x1024';
+}
+
+function toast(msg, type = 'success') {
+  const el = $('#toast');
+  el.textContent = msg;
+  el.className = 'toast ' + type + ' show';
+  setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, opts);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+// Status
+async function loadStats() {
+  try {
+    const d = await api('/admin/stats');
+    $('#st-dot').className = 'status-dot online';
+    $('#st-text').textContent = '在线';
+    $('#st-cache').textContent = d.cache_count + ' / ' + d.cache_max;
+    $('#st-memory').textContent = d.cache_memory_mb + ' MB';
+    $('#st-total').textContent = d.total_requests;
+    $('#st-success').textContent = d.success;
+    $('#st-fail').textContent = d.fail;
+    $('#st-apikey').textContent = d.api_key_masked;
+  } catch {
+    $('#st-dot').className = 'status-dot offline';
+    $('#st-text').textContent = '离线';
+  }
+}
+
+// Config
+async function loadConfig() {
+  try {
+    const d = await api('/admin/config');
+    $('#cfg-apikey-current').textContent = d.pollinations_api_key;
+    $('#cfg-ttl').value = d.image_cache_ttl;
+    $('#cfg-maxsize').value = d.image_cache_max_size;
+    $('#cfg-nologo').checked = d.default_nologo;
+    $('#cfg-private').checked = d.default_private;
+  } catch { toast('加载配置失败', 'error'); }
+}
+
+async function saveConfig() {
+  const body = {};
+  const key = $('#cfg-apikey').value.trim();
+  if (key) body.pollinations_api_key = key;
+  const ttl = parseInt($('#cfg-ttl').value);
+  if (!isNaN(ttl)) body.image_cache_ttl = ttl;
+  const max = parseInt($('#cfg-maxsize').value);
+  if (!isNaN(max)) body.image_cache_max_size = max;
+  body.default_nologo = $('#cfg-nologo').checked;
+  body.default_private = $('#cfg-private').checked;
+  try {
+    await api('/admin/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    $('#cfg-apikey').value = '';
+    toast('配置已保存');
+    loadConfig();
+  } catch { toast('保存失败', 'error'); }
+}
+
+// Models
+async function loadModels() {
+  try {
+    const d = await api('/v1/models');
+    const tbody = $('#models-tbody');
+    tbody.innerHTML = '';
+    d.data.forEach((m, i) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${i + 1}</td><td style="font-family:monospace">${m.id}</td><td>${m.owned_by}</td>`;
+      tbody.appendChild(tr);
+    });
+  } catch { toast('加载模型失败', 'error'); }
+}
+
+// Test image - load models dropdown
+async function loadTestModels() {
+  const sel = $('#test-model');
+  if (sel.children.length > 0) return;
+  try {
+    const d = await api('/v1/models');
+    d.data.forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m.id;
+      opt.textContent = m.id;
+      sel.appendChild(opt);
+    });
+  } catch {}
+}
+
+async function generateImage() {
+  const prompt = $('#test-prompt').value.trim();
+  if (!prompt) { toast('请输入 Prompt', 'error'); return; }
+  const btn = $('#test-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>生成中...';
+  $('#test-result').classList.add('hidden');
+  try {
+    const d = await api('/v1/images/generations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: $('#test-model').value,
+        prompt,
+        size: getSelectedSize()
+      })
+    });
+    if (d.data && d.data.length > 0) {
+      $('#test-img').src = d.data[0].url;
+      $('#test-result').classList.remove('hidden');
+      toast('图片生成成功');
+    }
+  } catch { toast('图片生成失败', 'error'); }
+  btn.disabled = false;
+  btn.textContent = '生成图片';
+}
+
+// Init
+loadStats();
+</script>
+</body>
+</html>
