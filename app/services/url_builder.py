@@ -4,6 +4,8 @@ from urllib.parse import quote
 
 from app.config import settings
 
+SAFE_FILTER_DISABLED = False
+
 
 def parse_size(size: str) -> Tuple[int, int]:
     parts = size.lower().split("x")
@@ -35,6 +37,7 @@ def build_pollinations_image_url(
         "seed": str(seed),
         "nologo": str(settings.default_nologo).lower(),
         "private": str(settings.default_private).lower(),
+        "safe": str(SAFE_FILTER_DISABLED).lower(),
     }
 
     query = "&".join(f"{k}={v}" for k, v in params.items())

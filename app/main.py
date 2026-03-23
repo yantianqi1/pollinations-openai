@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.routers import admin, images, models
 from app.services.image_cache import image_cache
-from app.services.pollinations import close_client, fetch_image_models
+from app.services.pollinations import close_client
 
 logging.basicConfig(
     level=logging.INFO,
@@ -22,8 +22,7 @@ STATIC_DIR = Path(__file__).parent / "static"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Starting up — warming model cache...")
-    await fetch_image_models()
+    logger.info("Starting up...")
     await image_cache.start_cleanup_loop()
     logger.info("Ready")
     yield

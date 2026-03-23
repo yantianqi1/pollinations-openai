@@ -11,6 +11,7 @@ from app.schemas.images import (
     ImageGenerationResponse,
 )
 from app.services.image_cache import image_cache
+from app.services.model_presets import resolve_model_request
 from app.services.pollinations import generate_image
 from app.services.url_builder import build_pollinations_image_url, parse_size
 
@@ -21,17 +22,24 @@ router = APIRouter()
 
 @router.post("/v1/images/generations", response_model=ImageGenerationResponse)
 async def create_image(request: Request, body: ImageGenerationRequest):
-    width, height = parse_size(body.size)
+    resolved_model, resolved_size = resolve_model_request(body.model, body.size)
+    width, height = parse_size(resolved_size)
 
     url = build_pollinations_image_url(
         prompt=body.prompt,
-        model=body.model,
+        model=resolved_model,
         width=width,
         height=height,
         seed=body.seed,
     )
 
-    logger.info("Generating image: model=%s size=%sx%s", body.model, width, height)
+    logger.info(
+        "Generating image: requested_model=%s upstream_model=%s size=%sx%s",
+        body.model,
+        resolved_model,
+        width,
+        height,
+    )
 
     try:
         image_bytes, content_type = await generate_image(url)
