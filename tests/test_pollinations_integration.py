@@ -22,6 +22,11 @@ PUBLIC_MODEL_ALIASES = [
     "z-image-688x1216",
     "z-image-832x1216",
 ]
+UPSTREAM_IMAGE_MODELS = [
+    {"name": "flux", "output_modalities": ["image"]},
+    {"name": "gptimage", "output_modalities": ["image"]},
+    {"name": "veo", "output_modalities": ["video"]},
+]
 
 
 class BuildPollinationsImageUrlTest(unittest.TestCase):
@@ -51,13 +56,23 @@ class BuildPollinationsImageUrlTest(unittest.TestCase):
 
 
 class DownstreamModelAliasTest(unittest.IsolatedAsyncioTestCase):
-    async def test_list_models_returns_only_alias_presets(self) -> None:
-        response = await list_models()
+    async def test_list_models_merges_aliases_with_upstream_image_models(self) -> None:
+        with patch(
+            "app.routers.models.fetch_upstream_image_models",
+            AsyncMock(
+                return_value=[
+                    *UPSTREAM_IMAGE_MODELS,
+                ]
+            ),
+            create=True,
+        ):
+            response = await list_models()
 
         self.assertEqual(
             [item.id for item in response.data],
-            PUBLIC_MODEL_ALIASES,
+            [*PUBLIC_MODEL_ALIASES, "flux", "gptimage"],
         )
+        self.assertNotIn("veo", [item.id for item in response.data])
 
     async def test_create_relay_image_maps_alias_to_zimage_and_fixed_size(self) -> None:
         original_relay_base_url = settings.relay_base_url

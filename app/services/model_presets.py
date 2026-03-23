@@ -33,6 +33,19 @@ def build_public_model_items() -> list[ModelItem]:
     ]
 
 
+def merge_model_items(upstream_items: list[ModelItem]) -> list[ModelItem]:
+    merged_items: list[ModelItem] = []
+    seen_ids: set[str] = set()
+
+    for item in [*build_public_model_items(), *upstream_items]:
+        if item.id in seen_ids:
+            continue
+        seen_ids.add(item.id)
+        merged_items.append(item)
+
+    return merged_items
+
+
 def resolve_model_request(model: str, size: str) -> tuple[str, str]:
     preset = PRESET_BY_ALIAS.get(model)
     if preset is None:
