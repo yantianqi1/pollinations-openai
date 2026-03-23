@@ -2,7 +2,7 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Expose only configured `z-image-*` aliases to downstream clients and map those aliases to upstream `zimage` requests with fixed sizes and `safe=false`.
+**Goal:** Expose only the supported `z-image-*` aliases to downstream clients and map those aliases to upstream `zimage` requests with fixed sizes and `safe=false`.
 
 **Architecture:** Add a dedicated preset-mapping module that owns alias definitions and resolution logic. Reuse that module in both `/v1/models` and `/v1/images/generations`, and keep URL construction responsible for emitting the final upstream query parameters.
 

@@ -12,12 +12,18 @@ from app.schemas.images import (
 )
 from app.services.image_cache import image_cache
 from app.services.model_presets import resolve_model_request
-from app.services.pollinations import generate_image
+from app.services.pollinations import PollinationsError, generate_image
 from app.services.url_builder import build_pollinations_image_url, parse_size
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _client_error_status(status_code: int) -> int:
+    if 400 <= status_code < 500:
+        return status_code
+    return 502
 
 
 @router.post("/v1/images/generations", response_model=ImageGenerationResponse)
@@ -43,9 +49,18 @@ async def create_image(request: Request, body: ImageGenerationRequest):
 
     try:
         image_bytes, content_type = await generate_image(url)
+    except PollinationsError as exc:
+        logger.warning("Image generation rejected: %s", exc)
+        raise HTTPException(
+            status_code=_client_error_status(exc.status_code),
+            detail=exc.message,
+        ) from exc
     except Exception:
         logger.exception("Image generation failed")
-        raise HTTPException(status_code=502, detail="Failed to generate image from Pollinations")
+        raise HTTPException(
+            status_code=502,
+            detail="Failed to generate image from Pollinations",
+        )
 
     image_id = image_cache.store(image_bytes, content_type)
 

@@ -57,7 +57,7 @@ table{width:100%;border-collapse:collapse}
 th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--border);font-size:14px}
 th{color:var(--text2);font-size:12px;text-transform:uppercase;letter-spacing:.5px}
 tr:hover{background:var(--card-hover)}
-.toast{position:fixed;bottom:24px;right:24px;padding:12px 20px;border-radius:8px;font-size:14px;z-index:999;opacity:0;transform:translateY(10px);transition:.3s}
+.toast{position:fixed;bottom:24px;right:24px;max-width:420px;padding:12px 20px;border-radius:8px;font-size:14px;z-index:999;opacity:0;transform:translateY(10px);transition:.3s;word-break:break-word}
 .toast.show{opacity:1;transform:translateY(0)}
 .toast.success{background:#1b5e20;color:#a5d6a7;border:1px solid #2e7d32}
 .toast.error{background:#b71c1c;color:#ef9a9a;border:1px solid #c62828}
@@ -232,7 +232,14 @@ function toast(msg, type = 'success') {
 
 async function api(path, opts = {}) {
   const res = await fetch(path, opts);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  if (!res.ok) {
+    const contentType = res.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      const data = await res.json().catch(() => null);
+      if (data && typeof data.detail === 'string') throw new Error(data.detail);
+    }
+    throw new Error(`HTTP ${res.status}`);
+  }
   return res.json();
 }
 
@@ -339,7 +346,9 @@ async function generateImage() {
       $('#test-result').classList.remove('hidden');
       toast('图片生成成功');
     }
-  } catch { toast('图片生成失败', 'error'); }
+  } catch (error) {
+    toast(error instanceof Error ? error.message : '图片生成失败', 'error');
+  }
   btn.disabled = false;
   btn.textContent = '生成图片';
 }

@@ -20,10 +20,6 @@ MODEL_PRESETS: Final[tuple[ModelPreset, ...]] = (
     ModelPreset("z-image-1216x688", UPSTREAM_ZIMAGE_MODEL, "1216x688"),
     ModelPreset("z-image-688x1216", UPSTREAM_ZIMAGE_MODEL, "688x1216"),
     ModelPreset("z-image-832x1216", UPSTREAM_ZIMAGE_MODEL, "832x1216"),
-    ModelPreset("z-image-1560x2048", UPSTREAM_ZIMAGE_MODEL, "1560x2048"),
-    ModelPreset("z-image-1260x2048", UPSTREAM_ZIMAGE_MODEL, "1260x2048"),
-    ModelPreset("z-image-2048x1260", UPSTREAM_ZIMAGE_MODEL, "2048x1260"),
-    ModelPreset("z-image-2048x1560", UPSTREAM_ZIMAGE_MODEL, "2048x1560"),
 )
 
 PRESET_BY_ALIAS: Final[dict[str, ModelPreset]] = {

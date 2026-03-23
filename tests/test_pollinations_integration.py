@@ -1,10 +1,15 @@
+import json
 import unittest
 from unittest.mock import AsyncMock, Mock, patch
+
+import httpx
+from fastapi import HTTPException
 
 from app.config import settings
 from app.routers.images import create_image
 from app.routers.models import list_models
 from app.schemas.images import ImageGenerationRequest
+from app.services.pollinations import PollinationsError, generate_image
 from app.services.url_builder import build_pollinations_image_url
 
 PUBLIC_MODEL_ALIASES = [
@@ -13,10 +18,6 @@ PUBLIC_MODEL_ALIASES = [
     "z-image-1216x688",
     "z-image-688x1216",
     "z-image-832x1216",
-    "z-image-1560x2048",
-    "z-image-1260x2048",
-    "z-image-2048x1260",
-    "z-image-2048x1560",
 ]
 
 
@@ -86,3 +87,110 @@ class DownstreamModelAliasTest(unittest.IsolatedAsyncioTestCase):
             )
         )
         self.assertEqual(response.data[0].url, "https://relay.example/images/img123")
+
+    async def test_create_image_surfaces_upstream_validation_error(self) -> None:
+        body = ImageGenerationRequest(
+            model="z-image-1024x1024",
+            prompt="a cute cat",
+            size="1024x1024",
+            seed=42,
+        )
+
+        with patch(
+            "app.routers.images.generate_image",
+            AsyncMock(
+                side_effect=PollinationsError(
+                    message="HTTP 422: upstream rejected request",
+                    status_code=422,
+                )
+            ),
+        ):
+            with self.assertRaises(HTTPException) as ctx:
+                await create_image(Mock(), body)
+
+        self.assertEqual(ctx.exception.status_code, 422)
+        self.assertEqual(
+            ctx.exception.detail,
+            "HTTP 422: upstream rejected request",
+        )
+
+
+class _FakeHttpClient:
+    def __init__(self, response: httpx.Response) -> None:
+        self._response = response
+
+    async def get(self, *_args, **_kwargs) -> httpx.Response:
+        return self._response
+
+
+class PollinationsErrorParsingTest(unittest.IsolatedAsyncioTestCase):
+    async def test_generate_image_extracts_nested_validation_error(self) -> None:
+        nested_body = {
+            "detail": [
+                {
+                    "msg": (
+                        "Value error, Requested 2048x1560 = 3,194,880 pixels exceeds "
+                        "limit of 2,359,296 pixels. Max: 1536x1536 or equivalent area."
+                    )
+                }
+            ]
+        }
+        outer_message = json.dumps(
+            {
+                "error": "Internal Server Error",
+                "message": f"HTTP error! status: 422, body: {json.dumps(nested_body)}",
+            }
+        )
+        response = httpx.Response(
+            status_code=500,
+            json={"success": False, "error": {"message": outer_message}},
+            request=httpx.Request("GET", "https://gen.pollinations.ai/image/test"),
+        )
+
+        with patch(
+            "app.services.pollinations.get_client",
+            AsyncMock(return_value=_FakeHttpClient(response)),
+        ):
+            with self.assertRaises(PollinationsError) as ctx:
+                await generate_image("https://gen.pollinations.ai/image/test")
+
+        self.assertEqual(ctx.exception.status_code, 422)
+        self.assertEqual(
+            str(ctx.exception),
+            (
+                "HTTP 422: Value error, Requested 2048x1560 = 3,194,880 pixels "
+                "exceeds limit of 2,359,296 pixels. Max: 1536x1536 or equivalent "
+                "area."
+            ),
+        )
+
+    async def test_generate_image_extracts_message_from_truncated_payload(self) -> None:
+        truncated_message = (
+            "HTTP error! status: 422, body: "
+            '{"detail":[{"type":"value_error","loc":["body","height"],'
+            '"msg":"Value error, Requested 2048x1560 = 3,194,880 pixels '
+            'exceeds limit of 2,359,296 pixels. Max: 1536x1536 or equivalent '
+            'area.","input":1560,'
+        )
+        response = httpx.Response(
+            status_code=500,
+            json={"success": False, "error": {"message": truncated_message}},
+            request=httpx.Request("GET", "https://gen.pollinations.ai/image/test"),
+        )
+
+        with patch(
+            "app.services.pollinations.get_client",
+            AsyncMock(return_value=_FakeHttpClient(response)),
+        ):
+            with self.assertRaises(PollinationsError) as ctx:
+                await generate_image("https://gen.pollinations.ai/image/test")
+
+        self.assertEqual(ctx.exception.status_code, 422)
+        self.assertEqual(
+            str(ctx.exception),
+            (
+                "HTTP 422: Value error, Requested 2048x1560 = 3,194,880 pixels "
+                "exceeds limit of 2,359,296 pixels. Max: 1536x1536 or equivalent "
+                "area."
+            ),
+        )
