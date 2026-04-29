@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>zimage</title>
+<style>
+:root{
+  --bg:#090d12;
+  --panel:#121923;
+  --border:#273243;
+  --text:#e7edf5;
+  --muted:#94a3b8;
+  --accent:#2dd4bf;
+  --accent-2:#7dd3fc;
+  --danger:#ef4444;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{min-height:100%}
+body{
+  display:grid;
+  place-items:center;
+  padding:24px;
+  background:
+    linear-gradient(135deg, rgba(45,212,191,.11), transparent 32%),
+    radial-gradient(circle at 80% 20%, rgba(125,211,252,.12), transparent 28%),
+    var(--bg);
+  color:var(--text);
+  font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+}
+.login-card{
+  width:min(100%, 420px);
+  background:linear-gradient(180deg, rgba(24,33,45,.98), rgba(18,25,35,.98));
+  border:1px solid var(--border);
+  border-radius:8px;
+  padding:28px;
+  box-shadow:0 24px 80px rgba(0,0,0,.35);
+}
+h1{
+  font-size:28px;
+  line-height:1.1;
+  margin-bottom:24px;
+}
+label{
+  display:block;
+  color:var(--muted);
+  margin-bottom:8px;
+}
+input{
+  width:100%;
+  color:var(--text);
+  background:var(--bg);
+  border:1px solid var(--border);
+  border-radius:8px;
+  padding:12px 14px;
+  outline:none;
+  font:inherit;
+}
+input:focus{
+  border-color:var(--accent);
+  box-shadow:0 0 0 3px rgba(45,212,191,.14);
+}
+button{
+  width:100%;
+  margin-top:16px;
+  border:0;
+  border-radius:8px;
+  padding:12px 14px;
+  cursor:pointer;
+  color:#041017;
+  background:linear-gradient(135deg, var(--accent), var(--accent-2));
+  font:inherit;
+  font-weight:700;
+}
+button:disabled{
+  cursor:not-allowed;
+  opacity:.65;
+}
+.error{
+  min-height:20px;
+  margin-top:12px;
+  color:var(--danger);
+}
+</style>
+</head>
+<body>
+<main class="login-card">
+  <h1>zimage</h1>
+  <form id="login-form">
+    <label for="admin-key">登录密钥</label>
+    <input id="admin-key" type="password" autocomplete="current-password" autofocus>
+    <button id="login-button" type="submit">进入</button>
+    <p class="error" id="login-error" aria-live="polite"></p>
+  </form>
+</main>
+<script>
+const form = document.querySelector("#login-form");
+const keyInput = document.querySelector("#admin-key");
+const errorText = document.querySelector("#login-error");
+const button = document.querySelector("#login-button");
+
+form.addEventListener("submit", async event => {
+  event.preventDefault();
+  const key = keyInput.value.trim();
+  if (!key) {
+    showError("请输入登录密钥");
+    return;
+  }
+  await login(key);
+});
+
+async function login(key) {
+  setBusy(true);
+  showError("");
+  try {
+    const response = await fetch("/admin/login", buildLoginRequest(key));
+    if (!response.ok) throw new Error(await readError(response));
+    window.location.reload();
+  } catch (error) {
+    showError(error.message || "登录失败");
+  } finally {
+    setBusy(false);
+  }
+}
+
+function buildLoginRequest(key) {
+  return {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({key}),
+  };
+}
+
+async function readError(response) {
+  const contentType = response.headers.get("content-type") || "";
+  if (!contentType.includes("application/json")) return `HTTP ${response.status}`;
+  const data = await response.json().catch(() => null);
+  return data && typeof data.detail === "string" ? data.detail : `HTTP ${response.status}`;
+}
+
+function showError(message) {
+  errorText.textContent = message;
+}
+
+function setBusy(isBusy) {
+  button.disabled = isBusy;
+  button.textContent = isBusy ? "验证中..." : "进入";
+}
+</script>
+</body>
+</html>

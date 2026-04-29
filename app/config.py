@@ -13,6 +13,7 @@ UPDATABLE_FIELDS = {
 
 class Settings(BaseSettings):
     pollinations_api_key: str
+    admin_panel_key: str = ""
     pollinations_base_url: str = "https://gen.pollinations.ai/image"
     pollinations_models_url: str = "https://gen.pollinations.ai/image/models"
     port: int = 8000
